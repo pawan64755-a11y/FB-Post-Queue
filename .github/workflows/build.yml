@@ -15,6 +15,10 @@ jobs:
       - run: npm install
       - run: mkdir -p www && cp index.html www/index.html
       - run: npx cap add android
+      - name: Set app icon
+        run: |
+          mkdir -p assets && cp icon.png assets/icon.png
+          npx @capacitor/assets generate --android --iconBackgroundColor '#FAFBF9' --iconBackgroundColorDark '#FAFBF9'
       - name: Add permissions
         run: |
           sed -i 's#<uses-permission android:name="android.permission.INTERNET" />#&\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />\n    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />#' android/app/src/main/AndroidManifest.xml
