@@ -1,0 +1,6 @@
+{
+  "appId": "com.fbpostqueue.app",
+  "appName": "FB Post Queue",
+  "webDir": "www",
+  "server": { "androidScheme": "https" }
+}
