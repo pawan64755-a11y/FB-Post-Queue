@@ -5,8 +5,8 @@
 <style>
 :root{--bg:#0e1a2b;--card:#172a45;--line:#27415f;--tx:#eaf1fb;--mu:#8ea6c4;--ok:#3ddc97;--due:#ffb84d;--late:#ff6b6b;--ac:#5aa8ff}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.4 system-ui,sans-serif;padding:12px 12px 80px}
-h1{font-size:19px;margin:4px 0 10px}.box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px}
-input[type=text],input[type=number],textarea{width:100%;background:#0e1a2b;border:1px solid var(--line);color:var(--tx);border-radius:8px;padding:10px;font:inherit;margin-bottom:8px}
+h1{font-size:19px;margin:4px 0 10px}h2{font-size:15px;margin:0 0 8px}.box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px}
+input[type=text],input[type=number],input[type=time],select,textarea{width:100%;background:#0e1a2b;border:1px solid var(--line);color:var(--tx);border-radius:8px;padding:10px;font:inherit;margin-bottom:8px}
 textarea{height:60px;resize:vertical}
 button{background:var(--ac);color:#06152b;border:0;border-radius:8px;padding:9px 12px;font:600 14px system-ui;cursor:pointer}
 button.g{background:transparent;border:1px solid var(--line);color:var(--tx)}button.ok{background:var(--ok)}button.r{background:transparent;color:var(--late);border:1px solid var(--late)}
@@ -20,6 +20,12 @@ button.g{background:transparent;border:1px solid var(--line);color:var(--tx)}but
 .p button{padding:6px 9px;font-size:12px;margin:0 4px 4px 0}
 #ban{display:none;position:fixed;left:10px;right:10px;bottom:10px;background:var(--due);color:#2a1a00;padding:14px;border-radius:10px;font-weight:700;z-index:9}
 .empty{color:var(--mu);text-align:center;padding:24px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.chip{display:inline-flex;align-items:center;gap:6px;background:#0e1a2b;border:1px solid var(--line);border-radius:999px;padding:5px 6px 5px 11px;font-size:13px}
+.chip b{cursor:pointer;color:var(--late);font-size:15px;line-height:1;padding:2px 6px}
+.lbl{font-size:12px;color:var(--mu);display:block;margin-bottom:2px}
+.f{flex:1 1 90px;min-width:90px}.f input,.f select{margin-bottom:0}
+details summary{cursor:pointer;color:var(--ac);font-size:13px;margin:6px 0}
 </style></head><body>
 <h1>FB Post Queue</h1>
 
@@ -36,6 +42,28 @@ button.g{background:transparent;border:1px solid var(--line);color:var(--tx)}but
 </div>
 
 <div class="box">
+  <h2>🕒 Roz ka schedule (har din same)</h2>
+  <div class="chips" id="chips"></div>
+  <div class="stat" id="schedinfo"></div>
+  <div class="row">
+    <input type="time" id="newt" style="width:140px;margin:0">
+    <button id="addt">➕ Time jodo</button>
+    <button class="g" id="rst">↺ Default</button>
+  </div>
+  <details>
+    <summary>Quick fill (range se saare slots banao)</summary>
+    <div class="row" style="align-items:flex-end">
+      <div class="f"><span class="lbl">Se</span><input type="time" id="qf" value="07:00"></div>
+      <div class="f"><span class="lbl">Tak</span><input type="time" id="qt" value="22:00"></div>
+      <div class="f"><span class="lbl">Har</span>
+        <select id="qs"><option value="30">30 min</option><option value="60" selected>1 ghanta</option><option value="120">2 ghante</option><option value="180">3 ghante</option></select></div>
+      <button id="qgo">Banao</button>
+    </div>
+    <div class="stat">Isse purana schedule badal jayega.</div>
+  </details>
+</div>
+
+<div class="box">
   <div class="row">
     <span>Har slot mein posts:</span>
     <input type="number" id="per" min="1" max="30" style="width:70px;margin:0">
@@ -47,7 +75,7 @@ button.g{background:transparent;border:1px solid var(--line);color:var(--tx)}but
     <button class="g" id="imp">⬆️ Restore</button>
     <input type="file" id="impf" accept=".json" style="display:none">
   </div>
-  <div class="stat">Slots: roz 7 PM se 1 AM, har ghante (7 slots). Reminder sirf slot ke time par.</div>
+  <div class="stat">Reminder sirf slot ke time par aata hai (bina awaaz ke, sirf vibrate/banner). Schedule badalne par aage ki queue apne aap naye slots mein lag jaati hai.</div>
 </div>
 
 <div class="stat" id="st"></div>
@@ -56,9 +84,11 @@ button.g{background:transparent;border:1px solid var(--line);color:var(--tx)}but
 
 <script>
 const $=s=>document.querySelector(s);
-const H=[19,20,21,22,23,24,25];
 const LS=(k,d)=>{try{const v=JSON.parse(localStorage.getItem(k));return v==null?d:v}catch(e){return d}};
 const SV=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
+const DEFAULT_TIMES=(()=>{const a=[];for(let m=7*60;m<=22*60;m+=60)a.push(m);return a})();
+const cleanTimes=a=>[...new Set((a||[]).map(Number).filter(m=>Number.isInteger(m)&&m>=0&&m<1440))].sort((a,b)=>a-b);
+let TIMES=cleanTimes(LS('times_v1',null)||DEFAULT_TIMES);
 let PER=LS('per_v2',1),notified=LS('notified',{}),db,urls=[],file=null,lastKey='';
 
 function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('fbq',1);
@@ -69,27 +99,51 @@ const all=()=>new Promise(r=>{const q=st('readonly').getAll();q.onsuccess=()=>r(
 const put=p=>new Promise(r=>{const q=st('readwrite').put(p);q.onsuccess=()=>r(q.result)});
 const del=id=>new Promise(r=>{const q=st('readwrite').delete(id);q.onsuccess=()=>r()});
 
-function slotsFrom(t){const out=[],d=new Date(t);d.setHours(0,0,0,0);d.setDate(d.getDate()-1);
-for(let i=0;i<500;i++){for(const h of H){const s=new Date(d);s.setHours(h,0,0,0);if(s.getTime()>t)out.push(s.getTime())}d.setDate(d.getDate()+1)}return out}
-function pick(cnt,now){for(const s of slotsFrom(now)){if((cnt[s]||0)<PER){cnt[s]=(cnt[s]||0)+1;return s}}}
+/* ---- schedule helpers ---- */
+const fmtT=m=>{const h=Math.floor(m/60),mi=m%60,ap=h>=12?'PM':'AM',h12=h%12||12;return h12+':'+String(mi).padStart(2,'0')+' '+ap};
+const parseT=v=>{if(!v)return null;const [h,m]=v.split(':').map(Number);return h*60+m};
+function* slotGen(t){
+  if(!TIMES.length)return;
+  const d=new Date(t);d.setHours(0,0,0,0);
+  for(let i=0;i<3000;i++){
+    for(const m of TIMES){const s=new Date(d);s.setHours(Math.floor(m/60),m%60,0,0);if(s.getTime()>t)yield s.getTime()}
+    d.setDate(d.getDate()+1)}
+}
+function pick(cnt,now){for(const s of slotGen(now)){if((cnt[s]||0)<PER){cnt[s]=(cnt[s]||0)+1;return s}}}
 function counts(ps,now){const c={};ps.forEach(p=>{if(p.slot>now)c[p.slot]=(c[p.slot]||0)+1});return c}
+/* next schedule time after slot s (end of that slot's window) */
+function nextAfter(s){
+  const d=new Date(s),m=d.getHours()*60+d.getMinutes(),n=TIMES.find(t=>t>m);
+  if(n!=null){d.setHours(Math.floor(n/60),n%60,0,0);return d.getTime()}
+  if(!TIMES.length)return s+864e5;
+  d.setDate(d.getDate()+1);d.setHours(Math.floor(TIMES[0]/60),TIMES[0]%60,0,0);return d.getTime()}
+async function rearrange(){
+  const now=Date.now(),ps=await all(),fut=ps.filter(p=>p.slot>now).sort((a,b)=>a.slot-b.slot||a.id-b.id),c={};
+  for(const p of fut){const s=pick(c,now);if(s!=null&&s!==p.slot){p.slot=s;await put(p)}}}
 
 const fmt=s=>{const d=new Date(s),t=new Date(),y=new Date();y.setDate(t.getDate()+1);
 const day=d.toDateString()===t.toDateString()?'Aaj':d.toDateString()===y.toDateString()?'Kal':d.toLocaleDateString([], {day:'numeric',month:'short'});
 return day+', '+d.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})};
 const esc=s=>(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
+function renderSched(){
+  $('#chips').innerHTML=TIMES.length?TIMES.map(m=>'<span class="chip">'+fmtT(m)+'<b data-t="'+m+'" title="Hatao">✕</b></span>').join(''):'<span class="stat">Koi time nahi. Neeche se time jodo.</span>';
+  $('#schedinfo').textContent='Roz '+TIMES.length+' slot × '+PER+' post = '+(TIMES.length*PER)+' posts/din'}
+async function setTimes(arr,msg){
+  TIMES=cleanTimes(arr);SV('times_v1',TIMES);
+  await rearrange();renderSched();await render();if(msg)toast(msg)}
+
 async function render(){
   urls.forEach(u=>URL.revokeObjectURL(u));urls=[];
   const now=Date.now(),ps=(await all()).sort((a,b)=>a.slot-b.slot||a.id-b.id);
   syncNotifs(ps);let due=0,late=0;
   const g={};ps.forEach(p=>{(g[p.slot]=g[p.slot]||[]).push(p);
-    if(p.slot+36e5<=now)late++;else if(p.slot<=now)due++});
+    if(nextAfter(p.slot)<=now)late++;else if(p.slot<=now)due++});
   $('#st').textContent='Queue mein '+ps.length+' posts • Abhi due: '+due+' • Overdue: '+late;
   if(!ps.length){$('#list').innerHTML='<div class="empty">Queue khaali hai. Upar se link aur image daalo.</div>';return}
   let h='';
   for(const s of Object.keys(g)){
-    const n=+s,cls=n+36e5<=now?'late':n<=now?'due':'';
+    const n=+s,cls=nextAfter(n)<=now?'late':n<=now?'due':'';
     const tag=cls==='late'?'Overdue':cls==='due'?'Abhi post karo':'';
     h+='<div class="slot '+cls+'"><span>'+fmt(n)+'</span><span>'+tag+' ('+g[s].length+')</span></div>';
     for(const p of g[s]){
@@ -109,33 +163,53 @@ async function render(){
 async function copy(t){try{await navigator.clipboard.writeText(t)}catch(e){const a=document.createElement('textarea');a.value=t;document.body.appendChild(a);a.select();document.execCommand('copy');a.remove()}toast('Copy ho gaya')}
 function toast(m){const b=$('#ban');b.textContent=m;b.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>b.style.display='none',2200)}
 
-let lastSig='';
+let lastSig='',chDone=false;
 async function syncNotifs(ps){
   const LN=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.LocalNotifications;if(!LN)return;
   const now=Date.now(),c={};ps.forEach(p=>{if(p.slot>now)c[p.slot]=(c[p.slot]||0)+1});
   const sig=JSON.stringify(c);if(sig===lastSig)return;lastSig=sig;
   try{const pr=await LN.requestPermissions();if(pr.display!=='granted')return;
+    /* silent channel (no sound, vibrate only) */
+    if(!chDone){try{await LN.createChannel({id:'fbq_silent',name:'Post reminders',description:'Silent post reminders',importance:3,vibration:true,sound:null,visibility:1})}catch(e){}chDone=true}
     const pend=await LN.getPending();if(pend.notifications.length)await LN.cancel({notifications:pend.notifications});
-    const list=Object.keys(c).map(Number).sort((a,b)=>a-b).slice(0,100).map(s=>({id:Math.floor(s/6e4),title:'Post karne ka time',body:c[s]+' post(s) Facebook par daalo',schedule:{at:new Date(s),allowWhileIdle:true}}));
+    const list=Object.keys(c).map(Number).sort((a,b)=>a-b).slice(0,100).map(s=>({id:Math.floor(s/6e4),title:'Post karne ka time',body:c[s]+' post(s) Facebook par daalo',channelId:'fbq_silent',schedule:{at:new Date(s),allowWhileIdle:true}}));
     if(list.length)await LN.schedule({notifications:list})}catch(e){}}
 async function nativeShare(blob,name){const P=Capacitor.Plugins,d=await blob2url(blob);
   const r=await P.Filesystem.writeFile({path:name,data:d.split(',')[1],directory:'CACHE'});await P.Share.share({files:[r.uri]})}
+
+/* ---- schedule UI ---- */
+$('#addt').onclick=async()=>{
+  const m=parseT($('#newt').value);if(m==null){toast('Pehle time chuno');return}
+  if(TIMES.includes(m)){toast('Ye time pehle se hai');return}
+  await setTimes([...TIMES,m],fmtT(m)+' jod diya');$('#newt').value=''};
+$('#chips').onclick=async e=>{
+  const t=e.target.dataset.t;if(t==null)return;
+  await setTimes(TIMES.filter(m=>m!==+t),fmtT(+t)+' hata diya')};
+$('#rst').onclick=async()=>{if(confirm('Schedule default (7 AM se 10 PM, har ghante) par wapas karna hai?'))await setTimes(DEFAULT_TIMES,'Default schedule laga diya')};
+$('#qgo').onclick=async()=>{
+  const a=parseT($('#qf').value),b=parseT($('#qt').value),s=+$('#qs').value;
+  if(a==null||b==null){toast('Se aur Tak time chuno');return}
+  if(b<a){toast('"Tak" time "Se" ke baad ka hona chahiye');return}
+  const arr=[];for(let m=a;m<=b;m+=s)arr.push(m);
+  await setTimes(arr,arr.length+' slots ban gaye')};
+
 $('#pick').onclick=()=>$('#img').click();
 $('#img').onchange=e=>{file=e.target.files[0]||null;$('#fn').textContent=file?'Image: '+file.name:'Image nahi chuni'};
 $('#paste').onclick=async()=>{try{$('#link').value=await navigator.clipboard.readText()}catch(e){toast('Paste allow nahi hua, link khud paste karo')}};
 $('#add').onclick=async()=>{
   const link=$('#link').value.trim();if(!link){toast('Pehle link daalo');return}
+  if(!TIMES.length){toast('Pehle schedule mein time jodo');return}
   const now=Date.now(),ps=await all(),slot=pick(counts(ps,now),now);
   await put({link,caption:$('#cap').value.trim(),img:file,slot,added:now});
   $('#link').value='';$('#cap').value='';$('#img').value='';file=null;$('#fn').textContent='Image nahi chuni';
   toast('Queue mein add: '+fmt(slot));render()};
 $('#per').value=PER;
-$('#per').onchange=e=>{PER=Math.max(1,+e.target.value||1);SV('per_v2',PER)};
+$('#per').onchange=async e=>{PER=Math.max(1,+e.target.value||1);SV('per_v2',PER);await rearrange();renderSched();render()};
 $('#resched').onclick=async()=>{
   const now=Date.now(),ps=await all(),c=counts(ps,now);
-  const late=ps.filter(p=>p.slot+36e5<=now).sort((a,b)=>a.slot-b.slot||a.id-b.id);
-  for(const p of late){p.slot=pick(c,now);await put(p)}
-  toast(late.length+' posts aage badhaye');render()};
+  const late=ps.filter(p=>nextAfter(p.slot)<=now).sort((a,b)=>a.slot-b.slot||a.id-b.id);
+  let n=0;for(const p of late){const s=pick(c,now);if(s!=null){p.slot=s;await put(p);n++}}
+  toast(n+' posts aage badhaye');render()};
 $('#list').onclick=async e=>{
   const a=e.target.dataset.a;if(!a)return;
   const id=+e.target.closest('.p').dataset.id,p=(await all()).find(x=>x.id===id);if(!p)return;
@@ -152,15 +226,14 @@ function ping(n){
   const m=n+' post(s) Facebook par daalne ka time ho gaya';
   const b=$('#ban');b.textContent='⏰ '+m;b.style.display='block';
   try{navigator.vibrate&&navigator.vibrate([300,150,300])}catch(e){}
-  try{if(Notification.permission==='granted')new Notification('Post karne ka time',{body:m,tag:'fbq'})}catch(e){}
-  try{const c=new (window.AudioContext||window.webkitAudioContext)(),o=c.createOscillator();o.connect(c.destination);o.frequency.value=880;o.start();o.stop(c.currentTime+.4)}catch(e){}
+  try{if(Notification.permission==='granted')new Notification('Post karne ka time',{body:m,tag:'fbq',silent:true})}catch(e){}
 }
 $('#ban').onclick=()=>$('#ban').style.display='none';
 $('#notif').onclick=async()=>{try{const r=await Notification.requestPermission();toast(r==='granted'?'Notification on':'Notification blocked')}catch(e){toast('Is browser mein notification nahi hai')}};
 
 async function tick(){
   const now=Date.now(),ps=await all(),due={};
-  ps.forEach(p=>{if(p.slot<=now&&now<p.slot+36e5)due[p.slot]=(due[p.slot]||0)+1});
+  ps.forEach(p=>{if(p.slot<=now&&now<nextAfter(p.slot))due[p.slot]=(due[p.slot]||0)+1});
   for(const s in due){if(!notified[s]){notified[s]=1;SV('notified',notified);ping(due[s])}}
   const k=Math.floor(now/6e4)+'|'+ps.length;if(k!==lastKey){lastKey=k;render()}
 }
@@ -169,15 +242,20 @@ const blob2url=b=>new Promise(r=>{if(!b)return r(null);const f=new FileReader();
 $('#exp').onclick=async()=>{
   const ps=await all(),out=[];
   for(const p of ps)out.push({...p,img:await blob2url(p.img),imgType:p.img&&p.img.type});
-  const u=URL.createObjectURL(new Blob([JSON.stringify(out)],{type:'application/json'})),a=document.createElement('a');
+  const u=URL.createObjectURL(new Blob([JSON.stringify({v:2,times:TIMES,per:PER,posts:out})],{type:'application/json'})),a=document.createElement('a');
   a.href=u;a.download='fb-queue-backup.json';a.click();setTimeout(()=>URL.revokeObjectURL(u),3000)};
 $('#imp').onclick=()=>$('#impf').click();
 $('#impf').onchange=async e=>{
-  try{const arr=JSON.parse(await e.target.files[0].text());
+  try{const data=JSON.parse(await e.target.files[0].text());
+    const arr=Array.isArray(data)?data:data.posts;
+    if(!Array.isArray(arr))throw 0;
+    if(!Array.isArray(data)){
+      if(Array.isArray(data.times)){TIMES=cleanTimes(data.times);SV('times_v1',TIMES)}
+      if(data.per){PER=Math.max(1,+data.per||1);SV('per_v2',PER);$('#per').value=PER}}
     for(const p of arr){delete p.id;p.img=p.img?await (await fetch(p.img)).blob():null;delete p.imgType;await put(p)}
-    toast(arr.length+' posts restore hue');render()}catch(x){toast('Backup file sahi nahi hai')}};
+    renderSched();toast(arr.length+' posts restore hue');render()}catch(x){toast('Backup file sahi nahi hai')}};
 
 (async()=>{await openDB();try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
-  await render();tick();setInterval(tick,15000);
+  renderSched();await render();tick();setInterval(tick,15000);
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)tick()})})();
 </script></body></html>
